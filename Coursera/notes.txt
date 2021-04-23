@@ -1,0 +1,166 @@
+best blog about transformers that have an encoder and decoder (attention is all you need): https://jalammar.github.io/illustrated-transformer/
+  - TODO: See Lukasz Kaizer's talk: https://youtu.be/rBCqOTEfxvg
+  - TODO: if you want to ever fine-tune GPT look at the resources in that blog post.  For example these training tips: https://arxiv.org/abs/1804.00247
+
+    References:
+	- Exploring the Limits of Transfer Learning with a Unified Text-to-Text Transformer (Raffel et al, 2019)
+	- Reformer: The Efficient Transformer (Kitaev et al, 2020)
+	- Attention Is All You Need (Vaswani et al, 2017)
+	-​ Deep contextualized word representations (Peters et al, 2018)
+	- The Illustrated Transformer (Alammar, 2018)
+	- The Illustrated GPT-2 (Visualizing Transformer Language Models) (Alammar, 2019)
+	- BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding (Devlin et al, 2018)
+	- How GPT3 Works - Visualizations and Animations (Alammar, 2020)
+
+
+
+TODO: Encoder-only transformers, like GPT (not read yet): https://jalammar.github.io/illustrated-gpt2/ (which is just a decoder re: Hannes)
+TODO: BERT: https://jalammar.github.io/a-visual-guide-to-using-bert-for-the-first-time/
+
+
+## Siamese Network
+
+- A good model for semantic similarity is siamese network.  You might want to use triplet loss.  
+- A key part about training siamese networks is triplet selection, you want to select "hard" negative examples during training that are most similar to the reference so that the model has more to learn. see the videos about triplet_loss for more info.
+
+## Why Transformers over RNNs
+
+- Its hard to parallelize RNNs because of their sequential nature.  There is an inner for loop.
+- LSTMs and GRUs, while being better than vanilla RNNs for long sequences, still struggle with long sequences.
+- Transformers do not suffer from the vanishing gradient problem.
+- Self attention gets the query, Q from the input.
+  
+## T5
+
+- A model that can do 5 tasks.  You input is text which is prefixed with the type of task you want to perform. 
+	- Text summarization, translation, autocomplete. NER, Q&A
+- This is reminiscent of GPT-3
+
+## Dot Product Attention
+
+- This is the main workhorse of attention in transformers.
+- see video on dot product attention and also to understand how its parallelized.
+- Z = softmax(Q * transpose(K)) * V
+- Often values and keys are the same.
+
+## Casual Attention
+
+There are three types of attention:
+1. Encoder / decoder: One sentence (Decoder looks at another one)
+2. Casual Attention (aka self attention): In the same sentence words look at previous words
+3. Bi-directional self attention: In one setence words both look at both previous and future words.
+
+However, how do you make sure that certain words can only see past words with transformers, since we aren't using an RNN?  
+
+In Casual attention Queries and Keys **come from the same sentence** 
+
+## Masking For Casual
+  - You add a matrix to the output of (Q * transpose(K)) also called "mask bias",  in which the upper triangular part of the matrix is negative infinity. 
+  - The diagnoal of the mask bias is zero, and the lower part of the matrix is zero, just the upper triangle is negative infinity.
+
+   An example of this bias mask is below  Its called a bias mask because the mask works by addition:  
+
+   [0 -inf -inf -inf
+    0   0  -inf -inf
+    0   0    0  -inf
+    0   0    0    0]
+
+  -  The idea is that the values where -inf are will be 0 after softmax, as the weights will be W = (Q * transpose(K) + M), or OK^T * M
+  -  Remember, attention is A = (QK^T + M) V
+
+## Multihead Attention
+  - Look at the blog post from the beginning.  
+  - You basically do different variations of QKV 
+  - Positional Encoding: learned vectors representing [1,2,3,4,5,6...] you add this vector to each words' embedding.  In other words, you add the positional encoding to the embedding.
+  - After the positional encoding you feed it to multi-head attention
+  - After that a feed forward layer with ReLU.  This works on each position independently
+  - Then there is a residual connection with layer normalization
+
+
+   You might be wondering how it is ok that the Attention layers gets a query that uses the target variables.  You must remember that the input to the Attention layer is shifted right by one timestep, so that the model is not peeking at target.  The first target token becomes "start_of_sentence"
+
+When we use a transfomer vs an LSTM we instead use something like a time distributed dense layer.  The question is are the weights shared across timesteps like an LSTM or is it truly independent? Answer: the weights are shared, and you don't have to use any special wrapper like TimeDistributed, it will automaticlally apply the dense layer across the last dimension for you and you will get a tensor that is (bs, n_steps, dense_units)
+
+## Text Summariztion
+
+- Transfomers can be used to summarize text.  The way you do it is to have the following structure:
+   ARTICLE_TEXT <EOS> <PAD> ARTICLE_SUMMARY <EOS> <PAD>   The last <PAD> is optional, might have 0 or more pads.
+
+- You could have the loss function only account for the summary part, but thats not what they did in the course, They must treated the entire thing like a language model, just jointly training for the LM task and the summary task at the same time.
+
+From T5 Paper: "encoder-only models like BERT are dsigned to produce a single prediction per input token or a single prediction for an entire input sequence.  This makes them applicable for classification or span prediction tasks but not for generative tasks like translation or abstractive summarization"
+
+Hamel Why?  I thought you could fine-tine BERT to do summarization?  Answer: in the course, week 2's assignment, we train a transformer, specifically a decoder to build a language model that summarizes.We actually concatenate the inputs with targets with a seperator in between.  We also masked the inputs so that the model is only penalized for getting the summary wrong.  The assignment does not use BERT, they use a casually masked transformer language model (specifically, its a decoder), in this sense, you feed in the prefix, and you let the model auto-regressively predict the summary.  The answer is BERT is actually not appropriate for summarization.
+
+## Question Answering
+
+Two flavors:
+- Context based: Q/A, you take in a Question and context and and tells you where in the context the answer is located
+- Closed book: You ask a question, it tells you the answer.
+
+
+## Transfer Learning
+
+You do pre-training on a different task first.  You can (1) Reduce training time (2) Improve predictions (3) leverage smaller datasets.
+
+Two methods:
+  1. Feature method: extract representations from model and use that in a greedy way for a different model.  The BERT paper describes the proper way to do this.  
+  2. Fine-tuning: train the original on a different tasks and free/partially freeze some of the original layers. 
+
+Pre-training tasks
+- Language Modeling
+- Masked words
+- Predict if next sentence (T/F) - (Used in training BERT with the CLS position.)
+
+
+## BERT
+
+This is a a bi-directional transformer, which means it can account for the entire input.  
+
+Pre-training: the model is first pretrained with two tasks (1) Next Sentence Prediction, which is a classification task, and (2) de-noising task recovers masked tokens, also known as Masked Language Modeling (MLM)
+
+You predict a middle word by using BOTH the left and right hand side.  You mask these words by supplying <MASK> in the input.  BERT actually employs transfer learning for several downstream tasks.
+
+Bert Objective:  You have (1) Position Embedding (2) Segment Embedding (3) Token Embeddings (as usual).  The input embeddings are simply the sum of these 3 aforementioned embeddings.  You have the [CLS] token add in front of every input, and you have the [SEP] token betwen each sentence.
+
+The model is trained with two objectives/losses (1) Predict mased tokens with cross entropy loss (2) Next sentence prediction with binary loss.  You then just add the two losses together!  That's right just add the losses together (although you may want to peek at the code to verify how the losses were combined).
+
+
+### Bert vs T5
+
+Bert is good for extractive tasks and classification, not for generative things because of its masked languaged model objective.  If you wanted to use BERT for something like summarization, you would have to stack a decoder on top of it.  
+
+From the T5 paper: "encoder only" models like BERT are designed to produce a single prediction per input token or a single prediction for an entire input sequence.  This makes them applicable for classification or span prediction tasks but not for generative tasks like translation or abstractive summarization. 
+
+## T5  
+
+
+This is a multi-task model as opposed to a single task that commonly takes place.
+
+
+# Reformer: Processing long text sequences 
+
+- Chatbots
+- Writing books
+
+If you try to run a transformer on a long sequence, you will run out of memory eventually.  
+
+Intuition: you don't need to consider all input words, you can somehow pre-filter words that are likely to be important. We can use LSH. 
+
+You can use LSH (Locality Sensitive Hashing): 
+ 1. Hash Q and K
+ 2. Standard attention within same-hash bins
+ 
+Also, reversible layers - which is confusing, but is an optimization that helps layers take up less memory by some clever math. 
+
+Reformer - you can fit 1M tokens on a 16GB GPU.  This is enough to pass in an entire book. Uses LSH attention and Reversible Layers. Reformers are great for things like 
+
+
+## The Evolution of Attention Based Models
+
+1. First there was CBOW, which is similar to Word to Vec
+2. Second there was ELMO which is a bi-directional LSTM
+3. Third therew as GPT which is a "decoder" which is language model, which is good for generative tasks.  "decoder" just means transformer with casual  masking to avoid peeking into the future.  GPT is unidirectional.
+4. Then comes Bert which is a MLM (multi-masked lang model), and also does next-sentence prediction
+5. Later T5 which is has an encoder-decoder multi-task model that can generate text and casts all its problems as text generation. "text-to-text" the input to T5 is a prefix like Classify: .... Summarize: ..... etc 
+
